@@ -1,0 +1,24 @@
+.locked:before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; z-index: 1000;
+  width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  cursor: wait;
+}
+.locked:after {
+  content: attr(lockmsg);
+  position: fixed;
+  top: 0; left: 50%; z-index: 1001;
+  width: 400px;
+  margin-left: -210px;
+  background: #fff;
+  padding: 10px;
+  border-radius: 0 0 6px 6px;
+  text-align: center;
+}
+.tcenter {text-align: center;}
+#popup-overlay {display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6);}
+.popup {display: none; position: absolute; top: 100px; left: 50%; width: 500px; margin-left: -250px; background: #fff; padding: 20px;}
+.current-file-name:before,.current-file-name:after {content: '"';}
+#wrapDrive, .file-is-not-created {display: none;}

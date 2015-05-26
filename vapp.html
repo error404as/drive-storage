@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Vapp - Google Drive data saving</title>
+
+<link href="vapp.css" rel="stylesheet" type="text/css" />
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+<script type="text/javascript">
+  if(typeof window.jQuery === 'undefined') {
+    document.write( unescape("%3Cscript src='jquery.js' type='text/javascript'%3E%3C/script%3E") );
+  }
+</script>
+<script src="vapp.min.js"></script>
+
+</head>
+<body>
+  
+  <form name="settings" id="settings">
+    <label><input type="checkbox" name="setUseDrive" id="setUseDrive"> use Google Drive source</label>
+  </form>
+
+  <div id="wrapDrive">
+    Current file on Drive: <span class="current-file-name"></span>
+    <input type="button" onclick="Vapp.ui.chooseResourceFile()" value="Change file">
+    <br>
+    <span class="file-is-not-created">File is not created yet. Will be created on next Save.</span>
+  </div>
+
+  <br> <br>
+  <div>
+    <input type="button" onclick="console.log(Vapp.data)" value="console.log(Vapp.data)" />
+    <input type="button" onclick="console.log(Vapp.options);console.log('Drive:', Vapp.options.dr_id, Vapp.options.dr_title);" value="console.log(Vapp.options)" />
+    <input type="button" onclick="Vapp.saveData()" value="Save appData" />
+  </div>
+  
+  <br> <br>
+  <div id="data"></div>
+
+  <div id="popup-overlay"><!----></div>
+  <div class="popup" id="pop-new">
+    <input type="button" onclick="Vapp.drive.abortDrive()" value="Close"><br><br>
+      Create source file on Drive: <input type="text" id="fname" value=""> <input type="button" onclick="Vapp.drive.addNewFile()" value="Create"><br><br>
+      <input type="button" onclick="Vapp.drive.createPicker()" value="Select file on Drive or Upload yours">
+  </div>
+  <div class="popup tcenter" id="pop-exists">
+      File <span class="current-file-name"></span> already exists. Do you want to use it anyway?<br><br>
+      <input type="button" onclick="Vapp.ui.hidePopup()" value="Sure"> <input type="button" onclick="Vapp.drive.addNewExistsBack()" value="Back">
+  </div>
+  <div class="popup tcenter" id="pop-picked">
+      <input type="button" onclick="Vapp.drive.getDataFromDrive()" value="Use data from file">
+      <br><br>
+      <input type="button" onclick="Vapp.saveData()" value="Write data to file">
+  </div>
+
+  <script type="text/javascript">
+    // https://console.developers.google.com/project 
+    var CLIENT_ID = '1027793413486-vhgujkanqqk216p7pfp083dvkmb7l6e5.apps.googleusercontent.com';
+    var DEV_KEY = 'AIzaSyB-LGU-rLVjWrnM5rWvFe_qWjiZdgwOyKQ';
+    var SCOPES = 'https://www.googleapis.com/auth/drive'; // permissions required
+
+    Vapp.init();
+    
+  </script>
+  
+  <!--
+  <br> <br>
+  <div>
+    <h3>Tips:</h3>
+    <ul>
+      <li>If you want to revert changes in Google Drive file, go to <a href="https://drive.google.com/drive/my-drive">Drive</a>, right click on your file, choose "Version" and download previous version. Use this downloaded file as source (will be uploaded to Drive) and remove incorrect file from the Drive.</li>
+      <li>If you delete file on Drive, make sure to remove it from Recycle Bin as well.</li>
+    </ul>
+  </div>
+  -->
+
+</body>
+</html>
