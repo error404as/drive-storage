@@ -223,14 +223,18 @@ Vapp.ui = {
     Vapp.ui.showPopup('pop-new');
   },
   formInit: function(){
-    $('#setUseDrive')[0].checked = Vapp.options.useDrive ? true : false;
-    $('#settings').on('change', Vapp.ui.formHandle);
+    if($('#setUseDrive')[0]){
+      $('#setUseDrive')[0].checked = Vapp.options.useDrive ? true : false;
+      $('#settings').on('change', Vapp.ui.formHandle);
+    }
   },
   formHandle: function(){
+    Vapp.options.useDrive = $('#setUseDrive')[0].checked;
+    this.triggerHandler();
+  },
+  triggerHandler: function(){
     var _ui = Vapp.ui,
         _o = Vapp.options;
-
-    _o.useDrive = $('#setUseDrive')[0].checked;
 
     if(_o.useDrive){
       if(typeof gapi === 'undefined' && !Vapp.gapi){
@@ -343,15 +347,29 @@ Vapp.drive = {
       Vapp.auth.checkAuth2();
       return;
     }
+    if(typeof google === 'undefined'){
+      Vapp.auth.checkAuth();
+      return;
+    }
     var accessToken = gapi.auth.getToken().access_token;
-    var picker = new google.picker.PickerBuilder()
-          .addView(new google.picker.DocsView())
-          .addView(new google.picker.DocsUploadView())
-          .enableFeature(google.picker.Feature.MINE_ONLY)
-          .setOAuthToken(accessToken)
-          .setDeveloperKey(DEV_KEY)
-          .setCallback(Vapp.drive.pickerCallback)
-          .build();
+    if(!Vapp.options.noUpload){
+      var picker = new google.picker.PickerBuilder()
+            .addView(new google.picker.DocsView())
+            .addView(new google.picker.DocsUploadView())
+            .enableFeature(google.picker.Feature.MINE_ONLY)
+            .setOAuthToken(accessToken)
+            .setDeveloperKey(DEV_KEY)
+            .setCallback(Vapp.drive.pickerCallback)
+            .build();
+    } else {
+      var picker = new google.picker.PickerBuilder()
+            .addView(new google.picker.DocsView())
+            .enableFeature(google.picker.Feature.MINE_ONLY)
+            .setOAuthToken(accessToken)
+            .setDeveloperKey(DEV_KEY)
+            .setCallback(Vapp.drive.pickerCallback)
+            .build();
+    }
     picker.setVisible(true);
   },
   pickerCallback: function(data){
@@ -366,6 +384,7 @@ Vapp.drive = {
         _o.dr_id = data.docs[0].id;
         _o.dr_title = data.docs[0].name;
         Vapp.setStogareData();
+        Vapp.callback.filePicked();
     }
   },
   checkFileExists: function(fname, callback){
@@ -454,8 +473,13 @@ Vapp.drive = {
   abortDrive: function(){
     Vapp.ui.trace('abortDrive'); /*debug_remove*/
     if(!Vapp.options.dr_title){
-      document.settings.setUseDrive.checked = false;
-      Vapp.ui.formHandle();
+      Vapp.options.useDrive = false;
+      if(document.settings && document.settings.setUseDrive){
+        document.settings.setUseDrive.checked = false;
+        Vapp.ui.formHandle();
+      } else {
+        Vapp.ui.triggerHandler();
+      }
       Vapp.getData();
     }
     Vapp.ui.hidePopup();
@@ -476,13 +500,16 @@ Vapp.drive = {
       _ui.updateFileName();
       _ui.reporter('Will create a new file on next Save'); /*debug_remove*/
       _ui.updateFileNotCreated(1);
+      Vapp.callback.newFileNameReady();
     }
     $('#fname').val('');
   }
 };
 
 Vapp.callback = {
-  requireFileName: function(){},
-  authOK: function(){},
-  dataSaved: function(){},
+  requireFileName: function(){ console.log('Callback: requireFileName'); },
+  authOK: function(){ console.log('Callback: authOK'); },
+  dataSaved: function(){ console.log('Callback: dataSaved'); },
+  newFileNameReady: function(){ console.log('Callback: newFileNameReady'); },
+  filePicked: function(){ console.log('Callback: filePicked'); },
 };
