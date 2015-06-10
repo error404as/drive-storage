@@ -29,7 +29,7 @@ var Vapp = {
     Vapp.getStogareData();
     Vapp.ui.formInit();
     if(Vapp.options.useDrive){
-      Vapp.auth.loadGapi();
+      Vapp.auth.loadGapi('vapp_clientLoad');
     } else {
       Vapp.getData(); // else Data will be autoloaded after gapi ready
     }
@@ -77,9 +77,9 @@ var Vapp = {
       _d.checkFileExists(_d.metadata.title, _d.saveDataHandle);
     } else {
       _ui.reporter('Data saved to localStorage.', 1); /*debug_remove*/
+      Vapp.callback.dataSaved();
     }
     localStorage.setItem(Vapp.dataKey, JSON.stringify(Vapp.data));
-    Vapp.handleData();
   },
   handleData: function(){
     Vapp.ui.trace('handleData'); /*debug_remove*/
@@ -104,12 +104,13 @@ var Vapp = {
 };
 
 Vapp.auth = {
-  loadGapi: function(){
+  loadGapi: function(callback){
+    callback = callback || 'vapp_clientLoad';
     Vapp.ui.trace('loadGapi'); /*debug_remove*/
     Vapp.gapi = true;
     Vapp.ui.lockScreen(true, 'Loading Google API');
     var script = document.createElement('script');
-    script.src = 'https://apis.google.com/js/client.js?onload=vapp_clientLoad';
+    script.src = 'https://apis.google.com/js/client.js?onload='+callback;
     document.getElementsByTagName('head')[0].appendChild(script);
   },
   handleClientLoad: function() {
@@ -121,6 +122,11 @@ Vapp.auth = {
     Vapp.ui.trace('checkAuth'); /*debug_remove*/
     gapi.auth.authorize({'client_id': CLIENT_ID, 'scope': SCOPES, 'immediate': true}, Vapp.auth.handleAuthResult);
   },
+  checkAuth2: function(){
+    if(!gapi.auth.getToken()){
+      gapi.auth.authorize({'client_id': CLIENT_ID, 'scope': SCOPES, 'immediate': false}, Vapp.auth.handleAuthResult);
+    }
+  },
   handleAuthResult: function(authResult) {
     var _ui = Vapp.ui,
         _o = Vapp.options;
@@ -128,6 +134,7 @@ Vapp.auth = {
     _ui.trace('handleAuthResult'); /*debug_remove*/
     _ui.lockScreen(false);
     if (authResult && !authResult.error) {
+      Vapp.callback.authOK();
       _ui.lockScreen(true, 'Loading Google Drive API');
       gapi.client.load('drive', 'v2', function(){
         gapi.load('picker');
@@ -151,23 +158,23 @@ var vapp_clientLoad = function() {
 };
 
 Vapp.ui = {
-/*debug_remove*/  trace: function(msg, data){
-/*debug_remove*/    if(data){
-/*debug_remove*/      console.log('->' + msg, data);
-/*debug_remove*/    } else {
-/*debug_remove*/      console.log('->' + msg);
-/*debug_remove*/    }
-/*debug_remove*/  },
-/*debug_remove*/  reporter: function(msg, data){
-/*debug_remove*/    console.log(msg);
-/*debug_remove*/    if(data){
-/*debug_remove*/      if(typeof data === 'object' || typeof data === 'string'){
-/*debug_remove*/        console.log(data);
-/*debug_remove*/      } else {
-/*debug_remove*/        console.log(Vapp.data);
-/*debug_remove*/      }
-/*debug_remove*/    }
-/*debug_remove*/  },
+  /*debug_remove*/  trace: function(msg, data){
+  /*debug_remove*/    if(data){
+  /*debug_remove*/      console.log('->' + msg, data);
+  /*debug_remove*/    } else {
+  /*debug_remove*/      console.log('->' + msg);
+  /*debug_remove*/    }
+  /*debug_remove*/  },
+  /*debug_remove*/  reporter: function(msg, data){
+  /*debug_remove*/    console.log(msg);
+  /*debug_remove*/    if(data){
+  /*debug_remove*/      if(typeof data === 'object' || typeof data === 'string'){
+  /*debug_remove*/        console.log(data);
+  /*debug_remove*/      } else {
+  /*debug_remove*/        console.log(Vapp.data);
+  /*debug_remove*/      }
+  /*debug_remove*/    }
+  /*debug_remove*/  },
   lockScreen: function(trig, msg){
     Vapp.ui.trace('lockScreen', trig); /*debug_remove*/
     if(trig){
@@ -190,6 +197,8 @@ Vapp.ui = {
       $('#popup-overlay').show();
       $('.popup').hide();
       $('#'+name).show();
+      Vapp.callback.requireFileName();
+      Vapp.auth.checkAuth2();
     }
   },
   updateFileNotCreated: function(trig){
@@ -225,7 +234,9 @@ Vapp.ui = {
 
     if(_o.useDrive){
       if(typeof gapi === 'undefined' && !Vapp.gapi){
-        Vapp.auth.loadGapi();
+        Vapp.auth.loadGapi('vapp_clientLoad');
+      } else if(!gapi.client.drive){
+        Vapp.auth.checkAuth();
       }
       _ui.chooseResourceFile();
       // popup opens, but block while gapi is ready
@@ -270,18 +281,19 @@ Vapp.drive = {
     _ui.trace('saveToFile',fileId); /*debug_remove*/
     _ui.updateFileNotCreated(0);
 
-/*debug_remove*/  if(fileId){
-/*debug_remove*/    // update
-/*debug_remove*/    _ui.reporter('Updating file ('+_meta.title+') with data:', 1);
-/*debug_remove*/  } else {
-/*debug_remove*/    // create
-/*debug_remove*/    _ui.reporter('Creating a new file ('+_meta.title+') with data:', 1);
-/*debug_remove*/  }
+  /*debug_remove*/  if(fileId){
+  /*debug_remove*/    // update
+  /*debug_remove*/    _ui.reporter('Updating file ('+_meta.title+') with data:', 1);
+  /*debug_remove*/  } else {
+  /*debug_remove*/    // create
+  /*debug_remove*/    _ui.reporter('Creating a new file ('+_meta.title+') with data:', 1);
+  /*debug_remove*/  }
 
     const boundary = '-------314159265358979323846264';
     const delimiter = "\r\n--" + boundary + "\r\n";
     const close_delim = "\r\n--" + boundary + "--";
-    var base64Data = btoa(JSON.stringify(Vapp.data));
+    var safeString = unescape(encodeURIComponent(JSON.stringify(Vapp.data)))
+    var base64Data = btoa(safeString);
     var multipartRequestBody =
         delimiter +
         'Content-Type: application/json\r\n\r\n' +
@@ -322,10 +334,15 @@ Vapp.drive = {
       _o.dr_id = res.id;
       _o.dr_title = res.title;
       Vapp.setStogareData();
+      Vapp.callback.dataSaved();
     });
   },
   createPicker: function(){
     Vapp.ui.trace('createPicker'); /*debug_remove*/
+    if(!gapi.auth.getToken()){
+      Vapp.auth.checkAuth2();
+      return;
+    }
     var accessToken = gapi.auth.getToken().access_token;
     var picker = new google.picker.PickerBuilder()
           .addView(new google.picker.DocsView())
@@ -462,4 +479,10 @@ Vapp.drive = {
     }
     $('#fname').val('');
   }
+};
+
+Vapp.callback = {
+  requireFileName: function(){},
+  authOK: function(){},
+  dataSaved: function(){},
 };
