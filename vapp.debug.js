@@ -230,7 +230,7 @@ Vapp.ui = {
   },
   formHandle: function(){
     Vapp.options.useDrive = $('#setUseDrive')[0].checked;
-    this.triggerHandler();
+    Vapp.ui.triggerHandler();
   },
   triggerHandler: function(){
     var _ui = Vapp.ui,
