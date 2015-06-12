@@ -197,8 +197,10 @@ Vapp.ui = {
       $('#popup-overlay').show();
       $('.popup').hide();
       $('#'+name).show();
-      Vapp.callback.requireFileName();
-      Vapp.auth.checkAuth2();
+      if(name === 'pop-new'){
+        Vapp.callback.requireFileName();
+        Vapp.auth.checkAuth2();
+      }
     }
   },
   updateFileNotCreated: function(trig){
@@ -343,6 +345,10 @@ Vapp.drive = {
   },
   createPicker: function(){
     Vapp.ui.trace('createPicker'); /*debug_remove*/
+    if(typeof gapi === 'undefined' && !Vapp.gapi){
+      Vapp.auth.loadGapi('vapp_clientLoad');
+      return;
+    }
     if(!gapi.auth.getToken()){
       Vapp.auth.checkAuth2();
       return;
