@@ -1,3 +1,5 @@
+/* overlay/popup */
+
 .drivesave-overlay {
   display: none;
   position: fixed;
@@ -21,14 +23,6 @@
   text-align: center;
 }
 
-#wrapDrive,
-.file-is-not-created {
-  display: none;
-}
-.picker-dialog-content {
-  position: relative;
-}
-
 .drivesave-popup .ico-close {
   position: absolute;
   right: 10px;
@@ -44,6 +38,8 @@
   margin: 10px 0;
   font-size: 11px;
 }
+
+/* window locker */
 
 .drivesave-locked {
   overflow: hidden;
@@ -71,4 +67,14 @@
   padding: 10px;
   border-radius: 0 0 6px 6px;
   text-align: center;
+}
+
+/* real world bugs fixing */
+
+#wrapDrive,
+.file-is-not-created {
+  display: none;
+}
+.picker-dialog-content {
+  position: relative;
 }
