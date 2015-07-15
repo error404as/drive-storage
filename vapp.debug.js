@@ -1,9 +1,6 @@
 /*
- - saving Vapp.data to Drive or localy
- - if Google Drive file not defined - saves to localStorage[Vapp.dataKey]
- - selected Google Drive file id/title saved to localStorage[Vapp.stateKey] (Vapp.options)
+ - saving Vapp.data to Drive
  - create Google Drive file with selected name is it doesn't exist, update it if exist (warning if user types name of existing file)
- - saved data is awailable in localStorage after disabling saving to Google Drive
 
 Used google tutorial examples:
 https://developers.google.com/drive/web/quickstart/quickstart-js
@@ -13,93 +10,76 @@ https://developers.google.com/drive/v2/reference/files/update
  */
 // lines with /*debug_remove*/ should be removed
 
+var DriveStorage = (function(){
+
+  return {};
+})();
+
 var Vapp = {
-  gapi: false,
-  stateKey: 'vapp_state',
-  dataKey: 'vapp_data',
+  gapiLoading: false,
+  data: null,
+  helper: null, // 'save', 'load'
+  doLater: null,
   options: {
     /*
-    useDrive: true,
     dr_id: "0B-UCMEm2hwO7bzNTRmNXdGdaRm8",
     dr_title: "sample.json"
     */
   },
-  data: {},
   init: function() {
-    Vapp.getStogareData();
-    Vapp.ui.formInit();
-    if(Vapp.options.useDrive){
-      Vapp.auth.loadGapi('vapp_clientLoad');
-    } else {
-      Vapp.getData(); // else Data will be autoloaded after gapi ready
-    }
+    Vapp.ui.add();
+    Vapp.auth.loadGapi('vapp_clientLoad');
   },
-  resetDrive: function(){
-    delete this.options.dr_id;
-    delete this.options.dr_title;
+  reset: function(){
+    Vapp.options = {};
+    Vapp.data = null;
+    Vapp.doLater = null;
+    Vapp.ui.hidePopup();
+    Vapp.ui.lockScreen(false);
+  },
+  isReady: function(){
+    Vapp.ui.add();
+    if(typeof gapi === 'undefined' && !Vapp.gapiLoading){
+      Vapp.auth.loadGapi('vapp_clientLoad');
+      return false;
+    } else if(!gapi.client.drive){
+      Vapp.auth.checkAuth();
+      return false;
+    }
+    return true;
   },
   getData: function(){
     Vapp.ui.trace('getData'); /*debug_remove*/
-    if(Vapp.options.useDrive){
-      Vapp.drive.getDataFromDrive();
-    } else {
-      var data = localStorage.getItem(Vapp.dataKey);
-      if(data){
-        try{
-          Vapp.data = JSON.parse(data);
-          Vapp.handleData();
-          Vapp.ui.reporter('Data loaded from localStorage', 1); /*debug_remove*/
-        }catch(e){
-          Vapp.ui.reporter('Sorry, but your JSON is incorrect.', data); /*debug_remove*/
-          Vapp.handleData();
-        }
-      } else {
-        Vapp.ui.reporter('You have no data yet.'); /*debug_remove*/
-        Vapp.handleData();
-      }
+    if(!Vapp.isReady()){
+      Vapp.doLater = function(){ Vapp.getData(); };
+      return;
     }
+    Vapp.helper = 'load';
+    Vapp.drive.getDataFromDrive();
   },
-  saveData: function() {
+  saveData: function(data) {
     var _ui = Vapp.ui,
         _d = Vapp.drive;
 
+    Vapp.data = data || Vapp.data;
+    if(!Vapp.isReady()){
+      Vapp.doLater = function(){ Vapp.saveData(); };
+      return;
+    }
+    Vapp.helper = 'save';
+
     _ui.trace('saveData'); /*debug_remove*/
     _ui.hidePopup();
-    if(Vapp.options.useDrive){
-      _ui.lockScreen(true, 'Saving app data');
-      _d.getFileMetadata();
-      if(!_d.metadata){
-        _ui.chooseResourceFile(); // ask to select file for saving
-        _ui.reporter('Saving canceled. File name is required.'); /*debug_remove*/
-        _ui.lockScreen(false);
-        return false;
-      }
-      _d.checkFileExists(_d.metadata.title, _d.saveDataHandle);
-    } else {
-      _ui.reporter('Data saved to localStorage.', 1); /*debug_remove*/
-      Vapp.callback.dataSaved();
+
+    _ui.lockScreen(true, 'Saving app data');
+    _d.getFileMetadata();
+    if(!_d.metadata){
+      _ui.showPopup('new'); // ask to select file for saving
+      _ui.reporter('Saving canceled. File name is required.'); /*debug_remove*/
+      _ui.lockScreen(false);
+      return false;
     }
-    localStorage.setItem(Vapp.dataKey, JSON.stringify(Vapp.data));
-  },
-  handleData: function(){
-    Vapp.ui.trace('handleData'); /*debug_remove*/
-    var str = JSON.stringify(Vapp.data);
-    if(!Vapp.data || str === '{}' || str === '[]'){
-      $('#data').html( 'No data yet...' );
-    } else {
-      $('#data').html( str );
-    }
-  },
-  getStogareData: function(){
-    Vapp.ui.trace('getStogareData'); /*debug_remove*/
-    var state = localStorage.getItem(Vapp.stateKey);
-    Vapp.options = state ? JSON.parse(state) : {};
-    Vapp.ui.updateFileName();
-  },
-  setStogareData: function(){
-    Vapp.ui.trace('setStogareData'); /*debug_remove*/
-    localStorage.setItem(Vapp.stateKey, JSON.stringify(Vapp.options));
-    Vapp.ui.updateFileName();
+    _d.checkFileExists(_d.metadata.title, _d.saveDataHandle);
   }
 };
 
@@ -107,7 +87,7 @@ Vapp.auth = {
   loadGapi: function(callback){
     callback = callback || 'vapp_clientLoad';
     Vapp.ui.trace('loadGapi'); /*debug_remove*/
-    Vapp.gapi = true;
+    Vapp.gapiLoading = true;
     Vapp.ui.lockScreen(true, 'Loading Google API');
     var script = document.createElement('script');
     script.src = 'https://apis.google.com/js/client.js?onload='+callback;
@@ -133,21 +113,18 @@ Vapp.auth = {
 
     _ui.trace('handleAuthResult'); /*debug_remove*/
     _ui.lockScreen(false);
-    if (authResult && !authResult.error) {
+    if(authResult && !authResult.error) {
       Vapp.callback.authOK();
       _ui.lockScreen(true, 'Loading Google Drive API');
       gapi.client.load('drive', 'v2', function(){
-        gapi.load('picker');
-        _ui.lockScreen(false);
-        if(_o.useDrive){
-          _ui.updateFileName();
-          if(_o.dr_id){
-            Vapp.getData();
-          } else {
-            _ui.chooseResourceFile();
-          }
-        }
+        gapi.load('picker', function(){
+          _ui.lockScreen(false);
+          Vapp.callback.driveOK();
+          if(typeof Vapp.doLater === 'function'){ Vapp.doLater(); Vapp.doLater = null; }
+        });
       });
+    } else {
+      Vapp.auth.checkAuth2();
     }
   }
 };
@@ -175,85 +152,56 @@ Vapp.ui = {
   /*debug_remove*/      }
   /*debug_remove*/    }
   /*debug_remove*/  },
+  add: function(){
+    if($('.drivesave-overlay').length){ return; }
+    var code = '<div class="drivesave-overlay"><!----></div>'
+      +'<div class="drivesave-popup" id="drivesave-new">'
+        +'<i class="ico-close">close</i>'
+        +'<br>'
+        +'Create file on Drive: <input type="text" id="drivesave-fname" value=""> <input type="button" onclick="Vapp.drive.addNewFile()" value="Create">'
+        +'<br><br>'
+        +'Or: <input type="button" onclick="Vapp.drive.createPicker()" value="Select file on Drive to rewrite">'
+      +'</div>'
+      +'<div class="drivesave-popup tcenter" id="drivesave-exists">'
+        +'File with this name already exists. Do you want to use it anyway?<br>'
+        +'<span class="msg"></span><br><br>'
+        +'<input type="button" onclick="Vapp.saveData()" value="Sure"> <input type="button" onclick="Vapp.drive.addNewExistsBack()" value="Back">'
+      +'</div>';
+    $('body').append(code);
+    $('.drivesave-popup .ico-close').on('click', Vapp.reset);
+  },
   lockScreen: function(trig, msg){
     Vapp.ui.trace('lockScreen', trig); /*debug_remove*/
     if(trig){
-      $('body').addClass('locked');
+      $('body').addClass('drivesave-locked');
       if(msg){
         $('body').attr('lockmsg', msg);
       }
     } else {
-      $('body').removeClass('locked').removeAttr('lockmsg');
+      $('body').removeClass('drivesave-locked').removeAttr('lockmsg');
     }
   },
   hidePopup: function(){
     Vapp.ui.trace('hidePopup'); /*debug_remove*/
-    $('#popup-overlay,.popup').hide();
+    $('.drivesave-overlay, .drivesave-popup').hide();
   },
   showPopup: function(name){
     Vapp.ui.trace('showPopup',name); /*debug_remove*/
-    var $pop = name ? $('#'+name) : null;
+    var $pop = name ? $('#drivesave-'+name) : null;
     if($pop && $pop.length){
-      $('#popup-overlay').show();
-      $('.popup').hide();
-      $('#'+name).show();
-      if(name === 'pop-new'){
-        Vapp.callback.requireFileName();
-        Vapp.auth.checkAuth2();
+      $('.drivesave-overlay').show();
+      $('.drivesave-popup').hide();
+      $('#drivesave-'+name).show();
+      if(name === 'new'){
+        $('#drivesave-fname').focus();
+        //Vapp.auth.checkAuth2();
       }
     }
   },
-  updateFileNotCreated: function(trig){
-    if(trig){
-      $('.file-is-not-created').show();
-    } else {
-      $('.file-is-not-created').hide();
-    }
-  },
-  updateFileName: function(){
-    Vapp.ui.trace('updateFileName'); /*debug_remove*/
-    if(Vapp.options.dr_title){
-      $('.current-file-name').text( Vapp.options.dr_title ).show();
-      $('#wrapDrive').show();
-    } else {
-      $('.current-file-name').hide();
-      $('#wrapDrive').hide();
-    }
-  },
-  chooseResourceFile: function(){
-    Vapp.ui.trace('chooseResourceFile'); /*debug_remove*/
-    Vapp.ui.showPopup('pop-new');
-  },
-  formInit: function(){
-    if($('#setUseDrive')[0]){
-      $('#setUseDrive')[0].checked = Vapp.options.useDrive ? true : false;
-      $('#settings').on('change', Vapp.ui.formHandle);
-    }
-  },
-  formHandle: function(){
-    Vapp.options.useDrive = $('#setUseDrive')[0].checked;
-    Vapp.ui.triggerHandler();
-  },
-  triggerHandler: function(){
-    var _ui = Vapp.ui,
-        _o = Vapp.options;
-
-    if(_o.useDrive){
-      if(typeof gapi === 'undefined' && !Vapp.gapi){
-        Vapp.auth.loadGapi('vapp_clientLoad');
-      } else if(!gapi.client.drive){
-        Vapp.auth.checkAuth();
-      }
-      _ui.chooseResourceFile();
-      // popup opens, but block while gapi is ready
-    } else {
-      Vapp.resetDrive();
-      _ui.updateFileNotCreated(0);
-    }
-
-    _ui.updateFileName();
-    Vapp.setStogareData();
+  existsMsg: function(msg){
+    $('#drivesave-exists .msg').html(msg);
   }
+
 };
 
 Vapp.drive = {
@@ -280,25 +228,25 @@ Vapp.drive = {
     }
   },
   saveToFile: function(fileId) {
-    var _ui = Vapp.ui
+    var _ui = Vapp.ui,
         _meta = Vapp.drive.metadata,
         _o = Vapp.options;
 
     _ui.trace('saveToFile',fileId); /*debug_remove*/
-    _ui.updateFileNotCreated(0);
 
-  /*debug_remove*/  if(fileId){
-  /*debug_remove*/    // update
-  /*debug_remove*/    _ui.reporter('Updating file ('+_meta.title+') with data:', 1);
-  /*debug_remove*/  } else {
-  /*debug_remove*/    // create
-  /*debug_remove*/    _ui.reporter('Creating a new file ('+_meta.title+') with data:', 1);
-  /*debug_remove*/  }
+    /*debug_remove*/  if(fileId){
+    /*debug_remove*/    // update
+    /*debug_remove*/    _ui.reporter('Updating file ('+_meta.title+') with data:', 1);
+    /*debug_remove*/  } else {
+    /*debug_remove*/    // create
+    /*debug_remove*/    _ui.reporter('Creating a new file ('+_meta.title+') with data:', 1);
+    /*debug_remove*/  }
 
     const boundary = '-------314159265358979323846264';
     const delimiter = "\r\n--" + boundary + "\r\n";
     const close_delim = "\r\n--" + boundary + "--";
-    var safeString = unescape(encodeURIComponent(JSON.stringify(Vapp.data)))
+    var savingData = typeof Vapp.data === 'string' ? Vapp.data : JSON.stringify(Vapp.data);
+    var safeString = unescape(encodeURIComponent(savingData))
     var base64Data = btoa(safeString);
     var multipartRequestBody =
         delimiter +
@@ -335,63 +283,23 @@ Vapp.drive = {
       var _debugMsg = 'New file created! Fileinfo:'; /*debug_remove*/
     }
     request.execute(function(res) {
-      _ui.lockScreen(false);
       _ui.reporter(_debugMsg, res); /*debug_remove*/
-      _o.dr_id = res.id;
-      _o.dr_title = res.title;
-      Vapp.setStogareData();
+      if(_o.trash){
+        Vapp.drive.restoreFromTrash(fileId);
+      }
+      Vapp.reset();
       Vapp.callback.dataSaved();
     });
   },
-  createPicker: function(){
-    Vapp.ui.trace('createPicker'); /*debug_remove*/
-    if(typeof gapi === 'undefined' && !Vapp.gapi){
-      Vapp.auth.loadGapi('vapp_clientLoad');
-      return;
-    }
-    if(!gapi.auth.getToken()){
-      Vapp.auth.checkAuth2();
-      return;
-    }
-    if(typeof google === 'undefined'){
-      Vapp.auth.checkAuth();
-      return;
-    }
-    var accessToken = gapi.auth.getToken().access_token;
-    if(!Vapp.options.noUpload){
-      var picker = new google.picker.PickerBuilder()
-            .addView(new google.picker.DocsView())
-            .addView(new google.picker.DocsUploadView())
-            .enableFeature(google.picker.Feature.MINE_ONLY)
-            .setOAuthToken(accessToken)
-            .setDeveloperKey(DEV_KEY)
-            .setCallback(Vapp.drive.pickerCallback)
-            .build();
-    } else {
-      var picker = new google.picker.PickerBuilder()
-            .addView(new google.picker.DocsView())
-            .enableFeature(google.picker.Feature.MINE_ONLY)
-            .setOAuthToken(accessToken)
-            .setDeveloperKey(DEV_KEY)
-            .setCallback(Vapp.drive.pickerCallback)
-            .build();
-    }
-    picker.setVisible(true);
-  },
-  pickerCallback: function(data){
-    var _ui = Vapp.ui,
-        _o = Vapp.options;
-
-    _ui.trace('pickerCallback'); /*debug_remove*/
-    if(data.action == google.picker.Action.PICKED){
-        _ui.reporter('Picker response', data); /*debug_remove*/
-        _ui.showPopup('pop-picked');
-        _ui.updateFileNotCreated(0);
-        _o.dr_id = data.docs[0].id;
-        _o.dr_title = data.docs[0].name;
-        Vapp.setStogareData();
-        Vapp.callback.filePicked();
-    }
+  restoreFromTrash: function(id){
+    var _ui = Vapp.ui;
+    var request = gapi.client.drive.files.untrash({
+      'fileId': id
+    });
+    _ui.trace('restoreFromTrash',id); /*debug_remove*/
+    request.execute(function(resp) {
+      _ui.trace('restored from Trash!'); /*debug_remove*/
+    });
   },
   checkFileExists: function(fname, callback){
     Vapp.ui.trace('checkFileExists', fname); /*debug_remove*/
@@ -409,6 +317,44 @@ Vapp.drive = {
       }
     });
   },
+  createPicker: function(){
+    Vapp.ui.trace('createPicker'); /*debug_remove*/
+    if(!gapi.auth.getToken()){
+      Vapp.auth.checkAuth2();
+      return;
+    }
+    if(typeof google === 'undefined'){
+      Vapp.auth.checkAuth();
+      return;
+    }
+    var accessToken = gapi.auth.getToken().access_token;
+    var picker = new google.picker.PickerBuilder()
+          .addView(new google.picker.DocsView().setIncludeFolders(true).setMode(google.picker.DocsViewMode.LIST))
+          //.addView(new google.picker.DocsUploadView())
+          .enableFeature(google.picker.Feature.MINE_ONLY)
+          .setOAuthToken(accessToken)
+          .setDeveloperKey(DEV_KEY)
+          .setCallback(Vapp.drive.pickerCallback)
+          .build();
+
+    picker.setVisible(true);
+  },
+  pickerCallback: function(data){
+    var _ui = Vapp.ui,
+        _o = Vapp.options;
+
+    _ui.trace('pickerCallback'); /*debug_remove*/
+    if(data.action == google.picker.Action.PICKED){
+      _ui.reporter('Picker response', data); /*debug_remove*/
+      _o.dr_id = data.docs[0].id;
+      _o.dr_title = data.docs[0].name;
+      if(Vapp.helper === 'load'){
+        Vapp.getData();
+      } else if(Vapp.helper === 'save'){
+        Vapp.saveData();
+      }
+    }
+  },
   downloadFile: function(file) {
     var _ui = Vapp.ui;
 
@@ -424,24 +370,24 @@ Vapp.drive = {
         _ui.reporter('Data downloaded:'); /*debug_remove*/
         try{
           Vapp.data = JSON.parse(data);
-          Vapp.handleData();
-          localStorage.setItem(Vapp.dataKey, JSON.stringify(Vapp.data));
-          _ui.reporter('Updated data:', 1); /*debug_remove*/
+          _ui.reporter('Received data:', 1); /*debug_remove*/
         }catch(e){
-          _ui.reporter('Sorry, but your JSON is incorrect.', data); /*debug_remove*/
+          Vapp.data = data;
+          _ui.reporter('Received data is not a valid JSON.', data); /*debug_remove*/
         }
+        // data received and sent to Callback
+        Vapp.callback.dataLoaded(Vapp.data);
+        Vapp.reset();
       };
       xhr.onerror = function() {
         _ui.lockScreen(false);
         _ui.reporter('XHR error!'); /*debug_remove*/
+        Vapp.reset();
       };
       xhr.send();
     } else {
-      _ui.lockScreen(false);
-      Vapp.resetDrive();
-      Vapp.setStogareData();
+      Vapp.reset();
       _ui.reporter('Can\'t download...'); /*debug_remove*/
-      Vapp.drive.abortDrive();
     }
   },
   getDataFromDrive: function(){
@@ -465,30 +411,10 @@ Vapp.drive = {
   },
   addNewFile: function(){
     Vapp.ui.trace('addNewFile'); /*debug_remove*/
-    var val = $.trim( $('#fname').val() );
+    var val = $.trim( $('#drivesave-fname').val() );
     if(val){
       Vapp.drive.checkFileExists(val, Vapp.drive.addNewFileHandle);
     }
-  },
-  addNewExistsBack: function(){
-    Vapp.ui.trace('addNewExistsBack'); /*debug_remove*/
-    Vapp.ui.showPopup('pop-new');
-    Vapp.resetDrive();
-    Vapp.setStogareData();
-  },
-  abortDrive: function(){
-    Vapp.ui.trace('abortDrive'); /*debug_remove*/
-    if(!Vapp.options.dr_title){
-      Vapp.options.useDrive = false;
-      if(document.settings && document.settings.setUseDrive){
-        document.settings.setUseDrive.checked = false;
-        Vapp.ui.formHandle();
-      } else {
-        Vapp.ui.triggerHandler();
-      }
-      Vapp.getData();
-    }
-    Vapp.ui.hidePopup();
   },
   addNewFileHandle: function(fl){
     var _ui = Vapp.ui,
@@ -498,24 +424,32 @@ Vapp.drive = {
     if(fl && fl.id && fl.title){
       _o.dr_id = fl.id;
       _o.dr_title = fl.title;
-      Vapp.setStogareData();
-      _ui.showPopup('pop-exists');
+      _ui.showPopup('exists');
+      if(fl.labels.trashed){
+        _o.trash = true;
+        _ui.existsMsg('It is in Trash folder! Will be restored if continue.');
+      } else {
+        _o.trash = false;
+        _ui.existsMsg('');
+      }
     } else {
       _ui.hidePopup();
-      _o.dr_title = $.trim( $('#fname').val() );
-      _ui.updateFileName();
-      _ui.reporter('Will create a new file on next Save'); /*debug_remove*/
-      _ui.updateFileNotCreated(1);
-      Vapp.callback.newFileNameReady();
+      _o.dr_title = $.trim( $('#drivesave-fname').val() );
+      Vapp.saveData();
     }
-    $('#fname').val('');
-  }
+    $('#drivesave-fname').val('');
+  },
+  addNewExistsBack: function(){
+    Vapp.ui.trace('addNewExistsBack'); /*debug_remove*/
+    Vapp.ui.showPopup('new');
+    Vapp.options = {}; // reset filename
+  },
+
 };
 
 Vapp.callback = {
-  requireFileName: function(){ console.log('Callback: requireFileName'); },
   authOK: function(){ console.log('Callback: authOK'); },
+  driveOK: function(){ console.log('Callback: driveOK'); },
   dataSaved: function(){ console.log('Callback: dataSaved'); },
-  newFileNameReady: function(){ console.log('Callback: newFileNameReady'); },
-  filePicked: function(){ console.log('Callback: filePicked'); },
+  dataLoaded: function(data){ console.log('Callback: dataLoaded ->'); console.log(data); },
 };
