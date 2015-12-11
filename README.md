@@ -1,5 +1,6 @@
 # DriveStorage
-DriveStorage - Google Drive data saving
+DriveStorage - Google Drive data saving<br>
+**[Demo page](http://anarion.info/drive-storage/)**
 
 # Description
 - use DriveStorage.save(somedata) to save `somedata` var to Google Drive
